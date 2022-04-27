@@ -1,0 +1,7 @@
+# github.com/emersion/go-sasl v0.0.0-20200509203442-7bfe0ed36a21
+## explicit
+github.com/emersion/go-sasl
+# github.com/emersion/go-smtp v0.15.1-0.20211103212524-30169acc42e7 => github.com/kayrus/go-smtp v0.15.1-0.20211216174341-f5f4e119d8cc
+## explicit
+github.com/emersion/go-smtp
+# github.com/emersion/go-smtp => github.com/kayrus/go-smtp v0.15.1-0.20211216174341-f5f4e119d8cc
