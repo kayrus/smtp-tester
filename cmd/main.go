@@ -52,7 +52,7 @@ type config struct {
 	Size       uint
 	MaxMails   uint64
 	ReuseSMTP  bool
-	Msg        *strings.Reader
+	Msg        string
 	Auth       sasl.Client
 	WG         sync.WaitGroup
 	Client     *smtp.Client
@@ -104,7 +104,14 @@ func (cfg *config) sendMultiple(n uint64, limiter chan struct{}) {
 
 	c := cfg.Client
 	defer c.Reset()
-	err := c.Mail(cfg.From.Address, nil)
+
+	err := c.Noop()
+	if err != nil {
+		cfg.trackErr("noop", err, limiter)
+		return
+	}
+
+	err = c.Mail(cfg.From.Address, nil)
 	if err != nil {
 		cfg.trackErr("mail", err, limiter)
 		return
@@ -122,7 +129,7 @@ func (cfg *config) sendMultiple(n uint64, limiter chan struct{}) {
 		return
 	}
 
-	_, err = io.Copy(w, cfg.Msg)
+	_, err = io.Copy(w, strings.NewReader(cfg.Msg))
 	if err != nil {
 		w.Close()
 		cfg.trackErr("copy", err, limiter)
@@ -230,7 +237,7 @@ func (cfg *config) sendSingle(n uint64, limiter chan struct{}) {
 		return
 	}
 
-	err = c.SendMail(cfg.From.Address, []string{cfg.To.Address}, cfg.Msg)
+	err = c.SendMail(cfg.From.Address, []string{cfg.To.Address}, strings.NewReader(cfg.Msg))
 	if err != nil {
 		cfg.trackErr("send", err, limiter)
 		return
@@ -342,6 +349,7 @@ func main() {
 		log.Fatalf("Please define --password argument")
 	}
 
+	// TODO: add support
 	if cfg.ReuseSMTP && cfg.Threads != 1 {
 		log.Fatalf("Multiple threads with reusing SMTP connection is not supported")
 	}
@@ -368,12 +376,12 @@ func main() {
 	// other parameters
 	cfg.Timeout = time.Second * time.Duration(timeout)
 	cfg.Auth = sasl.NewPlainClient("", cfg.Username, cfg.Password)
-	cfg.Msg = strings.NewReader("To: " + cfg.To.Address + "\r\n" +
+	cfg.Msg = "To: " + cfg.To.Address + "\r\n" +
 		"From: " + cfg.HeaderFrom.String() + "\r\n" +
 		"Subject: " + cfg.Subject + "\r\n" +
 		"\r\n" +
 		randStringBytes(cfg.Size) +
-		"\r\n")
+		"\r\n"
 
 	var send func(n uint64, limiter chan struct{})
 	if cfg.ReuseSMTP {
@@ -388,6 +396,7 @@ func main() {
 	}
 
 	if cfg.Threads == 0 {
+		cfg.WG.Add(1)
 		send(0, nil)
 		os.Exit(0)
 	}
