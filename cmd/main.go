@@ -252,7 +252,20 @@ func (cfg *config) sendSingle(n uint64, limiter chan struct{}) {
 
 func randStringBytes(n uint) string {
 	b := make([]byte, n)
+	maxLineSize := 1000
 	for i := range b {
+		// split line by 1000 symbols including "\r\n"
+		// See RFC 2821 #4.5.3.1
+		if i > 0 {
+			if (i)%maxLineSize == 0 {
+				b[i] = '\r'
+				continue
+			}
+			if (i-1)%maxLineSize == 0 {
+				b[i] = '\n'
+				continue
+			}
+		}
 		b[i] = letterBytes[rand.Intn(len(letterBytes))]
 	}
 	return string(b)
