@@ -77,7 +77,7 @@ func (cfg *config) trackErr(stage string, err error, limiter chan struct{}) {
 			addr.Port = 65535
 		}
 	case *smtp.SMTPError:
-		if err.Code == 554 {
+		if err.Code == 421 {
 			if strings.Contains(err.Message, "dial tcp") {
 				err.Message = errReplace1.ReplaceAllString(err.Message, `$1 backend$2`)
 			} else {
@@ -237,9 +237,8 @@ func (cfg *config) sendSingle(n uint64, limiter chan struct{}) {
 		return
 	}
 
-	err = c.SendMail(cfg.From.Address, []string{cfg.To.Address}, strings.NewReader(cfg.Msg))
+	err = cfg.sendMail(c, limiter, cfg.From.Address, []string{cfg.To.Address}, strings.NewReader(cfg.Msg))
 	if err != nil {
-		cfg.trackErr("send", err, limiter)
 		return
 	}
 
@@ -248,6 +247,43 @@ func (cfg *config) sendSingle(n uint64, limiter chan struct{}) {
 	}
 
 	<-limiter
+}
+
+func (cfg *config) sendMail(c *smtp.Client, limiter chan struct{}, from string, to []string, r io.Reader) error {
+	var err error
+
+	if err = c.Mail(from, nil); err != nil {
+		cfg.trackErr("mail", err, limiter)
+		return err
+	}
+	for _, addr := range to {
+		if err = c.Rcpt(addr); err != nil {
+			cfg.trackErr("rcpt", err, limiter)
+			return err
+		}
+	}
+	w, err := c.Data()
+	if err != nil {
+		cfg.trackErr("data", err, limiter)
+		return err
+	}
+	_, err = io.Copy(w, r)
+	if err != nil {
+		cfg.trackErr("copy", err, limiter)
+		return err
+	}
+	err = w.Close()
+	if err != nil {
+		cfg.trackErr("close", err, limiter)
+		return err
+	}
+	err = c.Quit()
+	if err != nil {
+		cfg.trackErr("quit", err, limiter)
+		return err
+	}
+
+	return nil
 }
 
 func randStringBytes(n uint) string {
